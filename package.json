@@ -1,0 +1,37 @@
+{
+  "name": "qq-mail-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "concurrently -k \"node --watch server/index.js\" \"vite --config client/vite.config.js\"",
+    "build": "vite build --config client/vite.config.js",
+    "start": "NODE_ENV=production node server/index.js",
+    "hash-password": "node server/hash-password.js",
+    "test": "node --test",
+    "check": "npm run test && npm run build"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "dotenv": "^16.5.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mailparser": "^3.7.2",
+    "nodemailer": "^9.0.5",
+    "pg": "^8.16.3",
+    "smtp-server": "^3.13.6",
+    "zod": "^3.25.32"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.4.1",
+    "concurrently": "^9.1.2",
+    "pg-mem": "^3.0.5",
+    "vite": "^6.3.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}
