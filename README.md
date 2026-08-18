@@ -4,7 +4,7 @@ A small self-hosted service for using company addresses from QQ Mail when real i
 
 - POP3/POP3S authenticates employee credentials and always presents an empty mailbox.
 - SMTP submission authenticates the same credentials, prevents sender spoofing, and relays through Brevo.
-- The React admin dashboard manages multiple company domains, individual employee accounts, Brevo credentials, and Cloudflare Email Routing automation.
+- The React admin dashboard manages multiple company domains, employee invitations, Brevo credentials, and Cloudflare Email Routing automation.
 - PostgreSQL stores configuration and persisted routing jobs. Employee passwords use bcrypt; Brevo and Cloudflare API keys use AES-256-GCM encryption.
 
 This service does **not** receive or store real inbound email. Keep inbound delivery pointed at Cloudflare Email Routing (or your existing forwarding provider).
@@ -123,7 +123,9 @@ Put the result in `ADMIN_PASSWORD_HASH` and remove `ADMIN_PASSWORD`. The dashboa
 2. Add every company domain that Brevo has authenticated.
 3. Enter Brevo's **SMTP Login** and **SMTP Key** under “Brevo relay”. The login is not the employee's From address.
 4. Under “Cloudflare routing”, enter the Cloudflare account ID and an API token with **Zone Read**, **Email Routing Addresses Write**, and **Email Routing Rules Write** permissions. Limit its resources to the relevant account and zones where possible.
-5. Add an employee address, its destination QQ/Gmail address, and the employee password. Cloudflare sends the destination-address verification email automatically.
+5. Add an employee address and its personal destination address. The service emails a private password setup link from `info@llab.so`, and Cloudflare sends the destination-address verification email automatically.
+
+Password setup links expire after 24 hours and are single-use. Only a SHA-256 hash of each random link token is stored; after setup, only the employee’s bcrypt password hash remains. Admins can send a replacement setup/reset link but do not choose or see employee passwords. A reset link does not disable the existing password before the employee completes it.
 
 The background worker checks pending destinations once per minute for up to 24 hours. As soon as Cloudflare reports the destination verified, it creates the exact-address forwarding rule (`employee@company.com` to the configured QQ/Gmail address) and stops checking. The deadline and progress are stored in PostgreSQL, so application restarts do not lose the job. Use “Retry” in the Accounts page to begin a new 24-hour window after expiry.
 

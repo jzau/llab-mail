@@ -38,3 +38,12 @@
   background: #f9e7e5;
   color: #9d423d;
 }
+
+.setup-card form {
+  display: grid;
+  gap: 16px;
+}
+
+.setup-card form button {
+  margin-top: 0;
+}

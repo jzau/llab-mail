@@ -12,6 +12,6 @@ export async function authenticateAccount(username, password) {
     WHERE a.email = $1 AND a.enabled = TRUE AND d.enabled = TRUE
   `, [email]);
   const account = result.rows[0];
-  if (!account || !(await bcrypt.compare(password, account.password_hash))) return null;
+  if (!account?.password_hash || !(await bcrypt.compare(password, account.password_hash))) return null;
   return account.email.toLowerCase();
 }

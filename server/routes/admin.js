@@ -8,6 +8,7 @@ import { domainPattern, normalizeDomain, normalizeEmail } from '../lib/normalize
 import { getCloudflareSettings, getPublicBrevoSettings, getPublicCloudflareSettings, saveBrevoSettings, saveCloudflareSettings } from '../services/settings.js';
 import { queueAccountRouting, requeueUnfinishedRouting } from '../services/routing-worker.js';
 import { CloudflareClient } from '../services/cloudflare.js';
+import { issueInvitation } from '../services/invitations.js';
 
 export const adminRouter = express.Router();
 const COOKIE = 'relay_admin';
@@ -16,7 +17,6 @@ const accountSchema = z.object({
   localPart: z.string().trim().min(1, 'Name is required').max(64).refine((value) => !value.includes('@'), 'Enter only the name before @'),
   domain: z.string().transform(normalizeDomain).refine((value) => domainPattern.test(value), 'Invalid domain'),
   forwardTo: z.string().trim().email('Invalid forwarding email').max(90),
-  password: z.string().min(1, 'Password is required').max(200),
 });
 const brevoSchema = z.object({
   host: z.string().trim().min(1).max(253),
@@ -77,7 +77,9 @@ adminRouter.get('/state', async (_req, res) => {
     pool.query('SELECT id, name, enabled, created_at AS "createdAt" FROM domains ORDER BY name'),
     pool.query(`SELECT id, email, forward_to AS "forwardTo", routing_status AS "routingStatus",
       routing_verified_at AS "routingVerifiedAt", routing_expires_at AS "routingExpiresAt",
-      routing_last_error AS "routingError", enabled, created_at AS "createdAt" FROM accounts ORDER BY email`),
+      routing_last_error AS "routingError", password_hash IS NOT NULL AS "passwordSet",
+      invite_expires_at AS "inviteExpiresAt", invite_sent_at AS "inviteSentAt",
+      invite_last_error AS "inviteError", enabled, created_at AS "createdAt" FROM accounts ORDER BY email`),
     getPublicBrevoSettings(),
     getPublicCloudflareSettings(),
   ]);
@@ -120,24 +122,23 @@ adminRouter.post('/accounts', async (req, res) => {
   if (!email) return res.status(400).json({ error: 'Invalid account name' });
   const domainResult = await pool.query('SELECT id FROM domains WHERE name = $1', [domain]);
   if (!domainResult.rowCount) return res.status(400).json({ error: 'Add the domain first' });
+  let result;
   try {
-    const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-    const result = await pool.query(`INSERT INTO accounts (domain_id, email, password_hash, forward_to)
-      VALUES ($1, $2, $3, $4) RETURNING id, email`, [domainResult.rows[0].id, email, passwordHash, parsed.data.forwardTo.toLowerCase()]);
-    await queueAccountRouting(result.rows[0].id);
-    res.status(201).json(result.rows[0]);
+    result = await pool.query(`INSERT INTO accounts (domain_id, email, forward_to)
+      VALUES ($1, $2, $3) RETURNING id, email`, [domainResult.rows[0].id, email, parsed.data.forwardTo.toLowerCase()]);
   } catch (error) {
-    res.status(409).json({ error: error.code === '23505' ? 'Account already exists' : 'Could not add account' });
+    return res.status(409).json({ error: error.code === '23505' ? 'Account already exists' : 'Could not add account' });
+  }
+  await queueAccountRouting(result.rows[0].id);
+  try {
+    await issueInvitation(result.rows[0].id);
+    res.status(201).json(result.rows[0]);
+  } catch {
+    res.status(201).json({ ...result.rows[0], warning: 'Account created, but the setup email failed. Use Resend setup.' });
   }
 });
 
 adminRouter.patch('/accounts/:id', async (req, res) => {
-  if (typeof req.body?.password === 'string') {
-    if (!req.body.password.length) return res.status(400).json({ error: 'Password is required' });
-    const hash = await bcrypt.hash(req.body.password, 12);
-    const result = await pool.query('UPDATE accounts SET password_hash = $1 WHERE id = $2', [hash, req.params.id]);
-    return result.rowCount ? res.json({ ok: true }) : res.status(404).json({ error: 'Account not found' });
-  }
   if (typeof req.body?.forwardTo === 'string') {
     const parsed = z.string().trim().email('Invalid forwarding email').max(90).safeParse(req.body.forwardTo);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -150,7 +151,7 @@ adminRouter.patch('/accounts/:id', async (req, res) => {
     return res.json({ ok: true });
   }
   const enabled = typeof req.body?.enabled === 'boolean' ? req.body.enabled : null;
-  if (enabled === null) return res.status(400).json({ error: 'Provide a password or enabled boolean' });
+  if (enabled === null) return res.status(400).json({ error: 'Provide an enabled boolean' });
   const result = await pool.query('UPDATE accounts SET enabled = $1 WHERE id = $2', [enabled, req.params.id]);
   result.rowCount ? res.json({ ok: true }) : res.status(404).json({ error: 'Account not found' });
 });
@@ -175,6 +176,17 @@ adminRouter.post('/accounts/:id/routing/retry', async (req, res) => {
   if (!result.rowCount) return res.status(404).json({ error: 'Account with forwarding address not found' });
   await queueAccountRouting(req.params.id);
   res.json({ ok: true });
+});
+
+adminRouter.post('/accounts/:id/invite', async (req, res) => {
+  const result = await pool.query('SELECT 1 FROM accounts WHERE id = $1', [req.params.id]);
+  if (!result.rowCount) return res.status(404).json({ error: 'Account not found' });
+  try {
+    await issueInvitation(req.params.id);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(502).json({ error: `Setup email could not be sent: ${error.message}` });
+  }
 });
 
 adminRouter.put('/brevo', async (req, res) => {

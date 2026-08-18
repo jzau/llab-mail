@@ -34,7 +34,12 @@ export async function initDb() {
       id BIGSERIAL PRIMARY KEY,
       domain_id BIGINT NOT NULL REFERENCES domains(id) ON DELETE RESTRICT,
       email VARCHAR(320) NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
+      password_hash TEXT,
+      invite_token_hash CHAR(64),
+      invite_expires_at TIMESTAMPTZ,
+      invite_sent_at TIMESTAMPTZ,
+      invite_last_error TEXT,
+      password_set_at TIMESTAMPTZ,
       forward_to VARCHAR(320),
       cloudflare_destination_id VARCHAR(64),
       cloudflare_rule_id VARCHAR(64),
@@ -55,6 +60,12 @@ export async function initDb() {
     );
     ALTER TABLE domains ADD COLUMN IF NOT EXISTS cloudflare_zone_id VARCHAR(64);
     ALTER TABLE accounts ADD COLUMN IF NOT EXISTS forward_to VARCHAR(320);
+    ALTER TABLE accounts ALTER COLUMN password_hash DROP NOT NULL;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS invite_token_hash CHAR(64);
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS invite_expires_at TIMESTAMPTZ;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS invite_sent_at TIMESTAMPTZ;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS invite_last_error TEXT;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS password_set_at TIMESTAMPTZ;
     ALTER TABLE accounts ADD COLUMN IF NOT EXISTS cloudflare_destination_id VARCHAR(64);
     ALTER TABLE accounts ADD COLUMN IF NOT EXISTS cloudflare_rule_id VARCHAR(64);
     ALTER TABLE accounts ADD COLUMN IF NOT EXISTS routing_status VARCHAR(32) NOT NULL DEFAULT 'not_configured';
@@ -65,6 +76,8 @@ export async function initDb() {
     ALTER TABLE accounts ADD COLUMN IF NOT EXISTS routing_last_error TEXT;
     CREATE INDEX IF NOT EXISTS accounts_routing_queue_idx ON accounts(routing_next_check_at)
       WHERE routing_status IN ('pending_verification', 'error');
+    CREATE UNIQUE INDEX IF NOT EXISTS accounts_invite_token_idx ON accounts(invite_token_hash)
+      WHERE invite_token_hash IS NOT NULL;
   `);
 }
 

@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { adminRouter } from './routes/admin.js';
+import { invitationRouter } from './routes/invitations.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -16,6 +17,7 @@ export function createWebApp() {
   app.use(cookieParser());
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use('/api/admin/login', rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false }));
+  app.use('/api/invitations', rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), invitationRouter);
   app.use('/api/admin', adminRouter);
 
   if (process.env.NODE_ENV === 'production') {

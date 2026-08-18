@@ -10,6 +10,8 @@ export const config = {
   production: process.env.NODE_ENV === 'production',
   webHost: process.env.WEB_HOST || '127.0.0.1',
   webPort: int('WEB_PORT', 3000),
+  publicBaseUrl: process.env.PUBLIC_BASE_URL || 'https://mail.llab.so',
+  inviteSenderEmail: process.env.INVITE_SENDER_EMAIL || 'info@llab.so',
   pop3Host: process.env.POP3_HOST || '0.0.0.0',
   pop3Port: int('POP3_PORT', 995),
   smtpHost: process.env.SMTP_HOST || '0.0.0.0',
@@ -32,6 +34,7 @@ export function validateConfig() {
   if (!config.sessionSecret || config.sessionSecret.length < 32) missing.push('SESSION_SECRET (at least 32 characters)');
   if (!config.encryptionKey || !/^[a-fA-F0-9]{64}$/.test(config.encryptionKey)) missing.push('APP_ENCRYPTION_KEY (64 hex characters)');
   if (!config.adminPassword && !config.adminPasswordHash) missing.push('ADMIN_PASSWORD or ADMIN_PASSWORD_HASH');
+  try { new URL(config.publicBaseUrl); } catch { missing.push('PUBLIC_BASE_URL (valid absolute URL)'); }
   if ((!config.tlsCertPath || !config.tlsKeyPath) && !config.allowInsecureLocal) missing.push('TLS_CERT_PATH and TLS_KEY_PATH');
   if (missing.length) throw new Error(`Missing or invalid configuration: ${missing.join(', ')}`);
 }
