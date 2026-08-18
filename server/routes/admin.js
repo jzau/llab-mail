@@ -10,7 +10,11 @@ import { getPublicBrevoSettings, saveBrevoSettings } from '../services/settings.
 export const adminRouter = express.Router();
 const COOKIE = 'relay_admin';
 const domainSchema = z.object({ name: z.string().transform(normalizeDomain).refine((v) => domainPattern.test(v), 'Invalid domain') });
-const accountSchema = z.object({ email: z.string().transform(normalizeEmail).refine(Boolean, 'Invalid email'), password: z.string().min(10).max(200) });
+const accountSchema = z.object({
+  localPart: z.string().trim().min(1, 'Name is required').max(64).refine((value) => !value.includes('@'), 'Enter only the name before @'),
+  domain: z.string().transform(normalizeDomain).refine((value) => domainPattern.test(value), 'Invalid domain'),
+  password: z.string().min(1, 'Password is required').max(200),
+});
 const brevoSchema = z.object({
   host: z.string().trim().min(1).max(253),
   port: z.coerce.number().int().min(1).max(65535),
@@ -101,8 +105,9 @@ adminRouter.delete('/domains/:id', async (req, res) => {
 adminRouter.post('/accounts', async (req, res) => {
   const parsed = accountSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-  const email = parsed.data.email;
-  const domain = email.slice(email.lastIndexOf('@') + 1);
+  const domain = parsed.data.domain;
+  const email = normalizeEmail(`${parsed.data.localPart}@${domain}`);
+  if (!email) return res.status(400).json({ error: 'Invalid account name' });
   const domainResult = await pool.query('SELECT id FROM domains WHERE name = $1', [domain]);
   if (!domainResult.rowCount) return res.status(400).json({ error: 'Add the domain first' });
   try {
@@ -117,7 +122,7 @@ adminRouter.post('/accounts', async (req, res) => {
 
 adminRouter.patch('/accounts/:id', async (req, res) => {
   if (typeof req.body?.password === 'string') {
-    if (req.body.password.length < 10) return res.status(400).json({ error: 'Password must be at least 10 characters' });
+    if (!req.body.password.length) return res.status(400).json({ error: 'Password is required' });
     const hash = await bcrypt.hash(req.body.password, 12);
     const result = await pool.query('UPDATE accounts SET password_hash = $1 WHERE id = $2', [hash, req.params.id]);
     return result.rowCount ? res.json({ ok: true }) : res.status(404).json({ error: 'Account not found' });
