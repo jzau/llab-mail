@@ -4,8 +4,8 @@ A small self-hosted service for using company addresses from QQ Mail when real i
 
 - POP3/POP3S authenticates employee credentials and always presents an empty mailbox.
 - SMTP submission authenticates the same credentials, prevents sender spoofing, and relays through Brevo.
-- The React admin dashboard manages multiple company domains, individual employee accounts, and the Brevo SMTP login/key.
-- PostgreSQL stores configuration. Employee passwords use bcrypt; the Brevo key uses AES-256-GCM encryption.
+- The React admin dashboard manages multiple company domains, individual employee accounts, Brevo credentials, and Cloudflare Email Routing automation.
+- PostgreSQL stores configuration and persisted routing jobs. Employee passwords use bcrypt; Brevo and Cloudflare API keys use AES-256-GCM encryption.
 
 This service does **not** receive or store real inbound email. Keep inbound delivery pointed at Cloudflare Email Routing (or your existing forwarding provider).
 
@@ -121,8 +121,13 @@ Put the result in `ADMIN_PASSWORD_HASH` and remove `ADMIN_PASSWORD`. The dashboa
 
 1. Open the HTTPS admin dashboard and sign in.
 2. Add every company domain that Brevo has authenticated.
-3. Add employee addresses and give each employee their generated password.
-4. Enter Brevo's **SMTP Login** and **SMTP Key** under “Brevo relay”. The login is not the employee's From address.
+3. Enter Brevo's **SMTP Login** and **SMTP Key** under “Brevo relay”. The login is not the employee's From address.
+4. Under “Cloudflare routing”, enter the Cloudflare account ID and an API token with **Zone Read**, **Email Routing Addresses Write**, and **Email Routing Rules Write** permissions. Limit its resources to the relevant account and zones where possible.
+5. Add an employee address, its destination QQ/Gmail address, and the employee password. Cloudflare sends the destination-address verification email automatically.
+
+The background worker checks pending destinations once per minute for up to 24 hours. As soon as Cloudflare reports the destination verified, it creates the exact-address forwarding rule (`employee@company.com` to the configured QQ/Gmail address) and stops checking. The deadline and progress are stored in PostgreSQL, so application restarts do not lose the job. Use “Retry” in the Accounts page to begin a new 24-hour window after expiry.
+
+Cloudflare Email Routing and its required MX records must already be enabled for each company domain. The service automates destination addresses and per-employee rules; it does not take control of the domain’s DNS setup.
 
 Recommended employee password generation:
 
@@ -154,7 +159,7 @@ curl http://127.0.0.1:3000/health
 npm test
 ```
 
-Back up PostgreSQL, `.env`, and especially `APP_ENCRYPTION_KEY`. A simple logical backup is:
+Back up PostgreSQL, `.env`, and especially `APP_ENCRYPTION_KEY`. Without that key, neither the stored Brevo key nor Cloudflare API token can be decrypted. A simple logical backup is:
 
 ```bash
 pg_dump --dbname="$DATABASE_URL" --format=custom --file="llab-mail-$(date +%F).dump"

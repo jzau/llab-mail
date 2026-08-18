@@ -26,6 +26,7 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS domains (
       id BIGSERIAL PRIMARY KEY,
       name VARCHAR(253) NOT NULL UNIQUE,
+      cloudflare_zone_id VARCHAR(64),
       enabled BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -34,6 +35,15 @@ export async function initDb() {
       domain_id BIGINT NOT NULL REFERENCES domains(id) ON DELETE RESTRICT,
       email VARCHAR(320) NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
+      forward_to VARCHAR(320),
+      cloudflare_destination_id VARCHAR(64),
+      cloudflare_rule_id VARCHAR(64),
+      routing_status VARCHAR(32) NOT NULL DEFAULT 'not_configured',
+      routing_started_at TIMESTAMPTZ,
+      routing_next_check_at TIMESTAMPTZ,
+      routing_expires_at TIMESTAMPTZ,
+      routing_verified_at TIMESTAMPTZ,
+      routing_last_error TEXT,
       enabled BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -43,6 +53,18 @@ export async function initDb() {
       value TEXT NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    ALTER TABLE domains ADD COLUMN IF NOT EXISTS cloudflare_zone_id VARCHAR(64);
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS forward_to VARCHAR(320);
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS cloudflare_destination_id VARCHAR(64);
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS cloudflare_rule_id VARCHAR(64);
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS routing_status VARCHAR(32) NOT NULL DEFAULT 'not_configured';
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS routing_started_at TIMESTAMPTZ;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS routing_next_check_at TIMESTAMPTZ;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS routing_expires_at TIMESTAMPTZ;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS routing_verified_at TIMESTAMPTZ;
+    ALTER TABLE accounts ADD COLUMN IF NOT EXISTS routing_last_error TEXT;
+    CREATE INDEX IF NOT EXISTS accounts_routing_queue_idx ON accounts(routing_next_check_at)
+      WHERE routing_status IN ('pending_verification', 'error');
   `);
 }
 

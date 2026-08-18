@@ -1,0 +1,40 @@
+.account-form {
+  min-width: 72%;
+}
+
+.accounts-table {
+  overflow: auto;
+}
+
+.accounts-table .tr {
+  grid-template-columns: minmax(180px, 1.35fr) minmax(170px, 1.25fr) 150px 90px 110px minmax(245px, 1.5fr);
+  min-width: 1080px;
+}
+
+.route-pill {
+  display: inline-block;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: #eceff3;
+  color: #596273;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.route-pill.active {
+  background: #e2f3e7;
+  color: #287143;
+}
+
+.route-pill.pending_verification {
+  background: #f7ecd6;
+  color: #876326;
+}
+
+.route-pill.error,
+.route-pill.expired {
+  background: #f9e7e5;
+  color: #9d423d;
+}

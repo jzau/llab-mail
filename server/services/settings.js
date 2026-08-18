@@ -36,3 +36,37 @@ export async function saveBrevoSettings({ host, port, login, key }) {
     client.release();
   }
 }
+
+export async function getCloudflareSettings() {
+  const result = await pool.query(`SELECT key, value FROM settings
+    WHERE key IN ('cloudflare_account_id', 'cloudflare_api_token')`);
+  const values = Object.fromEntries(result.rows.map((row) => [row.key, row.value]));
+  return {
+    accountId: values.cloudflare_account_id || null,
+    apiToken: values.cloudflare_api_token ? decrypt(values.cloudflare_api_token) : null,
+  };
+}
+
+export async function getPublicCloudflareSettings() {
+  const value = await getCloudflareSettings();
+  return { accountId: value.accountId || '', tokenConfigured: Boolean(value.apiToken) };
+}
+
+export async function saveCloudflareSettings({ accountId, apiToken }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`INSERT INTO settings (key, value, updated_at) VALUES ('cloudflare_account_id', $1, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`, [accountId]);
+    if (apiToken) {
+      await client.query(`INSERT INTO settings (key, value, updated_at) VALUES ('cloudflare_api_token', $1, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`, [encrypt(apiToken)]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
